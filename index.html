@@ -236,179 +236,169 @@
     </style>
 </head>
 <body>
-    <div class="container">
-        <h1>🔐 Auth Demo</h1>
-        <p class="subtitle">Multi-provider OAuth authentication example</p>
+<div class="container">
+    <h1>🔐 Auth Demo</h1>
+    <p class="subtitle">Multi-provider OAuth authentication example</p>
 
-        <div id="app">
-            <div class="loading">
-                <div class="spinner"></div>
-                <p>Checking authentication status...</p>
-            </div>
-        </div>
-
-        <div class="footer">
-            Powered by Cloudflare Workers + OAuth
+    <div id="app">
+        <div class="loading">
+            <div class="spinner"></div>
+            <p>Checking authentication status...</p>
         </div>
     </div>
 
-    <script>
-        // ==================== CONFIGURATION ====================
-        const CONFIG = {
-            COOKIE_CHECK_SITE: 'https://authmark.github.io/CheckCookie',
-            COOKIE_PREFIX: 'accid_', // each provider will have a separate cookie
-            // Example providers (can be empty!)
-            PROVIDERS: {
-                google: { name: 'Google', icon: '🔵' },
-                github: { name: 'GitHub', icon: '⚫' },
-                microsoft: { name: 'Microsoft', icon: '🟦' },
-                discord: { name: 'Discord', icon: '🟣' }
-            }
-        };
-    
-        // ==================== HELPER FUNCTIONS ====================
-        function getCookie(name) {
-            const value = `; ${document.cookie}`;
-            const parts = value.split(`; ${name}=`);
-            if (parts.length === 2) {
-                return parts.pop().split(';').shift();
-            }
-            return null;
+    <div class="footer">
+        Powered by Cloudflare Workers + OAuth
+    </div>
+</div>
+
+<script>
+    // ==================== CONFIGURATION ====================
+    const CONFIG = {
+        COOKIE_CHECK_SITE: 'https://authmark.github.io/CheckCookie',
+        COOKIE_PREFIX: 'accid_',
+        PROVIDERS: {
+            google: { name: 'Google', icon: '🔵' },
+            github: { name: 'GitHub', icon: '⚫' },
+            microsoft: { name: 'Microsoft', icon: '🟦' },
+            discord: { name: 'Discord', icon: '🟣' }
         }
-    
-        function deleteCookie(name) {
-            document.cookie = `${name}=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT`;
+    };
+
+    // ==================== HELPER FUNCTIONS ====================
+    function getCookie(name) {
+        const cookies = document.cookie.split(';').map(c => c.trim());
+        for (let c of cookies) {
+            if (c.startsWith(name + '=')) return c.substring(name.length + 1);
         }
-    
-        function getCurrentURL() {
-            return window.location.href.split('?')[0];
+        return null;
+    }
+
+    function deleteCookie(name) {
+        document.cookie = `${name}=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT`;
+    }
+
+    function getCurrentURL() {
+        return window.location.href.split('?')[0];
+    }
+
+    // ==================== UI RENDERING ====================
+    function renderProviderButtons() {
+        if (!CONFIG.PROVIDERS || Object.keys(CONFIG.PROVIDERS).length === 0) {
+            return `<p style="text-align:center; color:#666;">No authentication providers configured. Please contact the admin.</p>`;
         }
-    
-        // ==================== UI RENDERING ====================
-    
-        function renderProviderButtons() {
-            if (!CONFIG.PROVIDERS || Object.keys(CONFIG.PROVIDERS).length === 0) {
-                return `<p style="text-align:center; color:#666;">No authentication providers configured. Please contact the admin.</p>`;
-            }
-    
-            return `<div class="provider-grid">
-                ${Object.entries(CONFIG.PROVIDERS).map(([key, provider]) => `
-                    <button class="provider-btn" onclick="login('${key}')">
-                        <span class="provider-icon">${provider.icon}</span>
-                        ${provider.name}
-                    </button>
-                `).join('')}
-            </div>`;
-        }
-    
-        function renderLoggedOut() {
-            const app = document.getElementById('app');
-            app.innerHTML = `
-                <div class="status-card logged-out">
-                    <div class="status-title">🔓 Not Authenticated</div>
-                    <div class="status-text">
-                        Please select a provider to log in and access protected content.
-                    </div>
-                    <span class="badge error">Logged Out</span>
-                </div>
-    
-                ${renderProviderButtons()}
-    
-                <div class="divider"></div>
-    
-                <p style="text-align: center; color: #666; font-size: 14px;">
-                    Choose any provider above to authenticate
-                </p>
-            `;
-        }
-    
-        function renderLoggedIn(logins) {
-            const app = document.getElementById('app');
-    
-            let accountsHTML = '';
-            let protectedHTML = '';
-    
-            Object.entries(logins).forEach(([provider, accid]) => {
-                accountsHTML += `
-                    <div class="account-info">
-                        <div class="account-label">${CONFIG.PROVIDERS[provider]?.name || provider} Account ID</div>
-                        <div class="account-id">${accid}</div>
-                    </div>
-                `;
-                protectedHTML += `
-                    <div class="protected-content">
-                        <h2>🎉 Protected Content (${CONFIG.PROVIDERS[provider]?.name || provider})</h2>
-                        <p>This content is only visible to authenticated users for this provider!</p>
-                    </div>
-                `;
-            });
-    
-            app.innerHTML = `
-                <div class="status-card logged-in">
-                    <div class="status-title">✅ Authenticated</div>
-                    <div class="status-text">
-                        You are successfully logged in with ${Object.keys(logins).length} provider(s)!
-                    </div>
-                    <span class="badge success">Logged In</span>
-                </div>
-    
-                ${accountsHTML}
-                ${protectedHTML}
-    
-                <div class="divider"></div>
-    
-                <button class="logout-btn" onclick="logout()">
-                    🚪 Logout
+        return `<div class="provider-grid">
+            ${Object.entries(CONFIG.PROVIDERS).map(([key, provider]) => `
+                <button class="provider-btn" onclick="login('${key}')">
+                    <span class="provider-icon">${provider.icon}</span>
+                    ${provider.name}
                 </button>
+            `).join('')}
+        </div>`;
+    }
+
+    function renderLoggedOut() {
+        const app = document.getElementById('app');
+        app.innerHTML = `
+            <div class="status-card logged-out">
+                <div class="status-title">🔓 Not Authenticated</div>
+                <div class="status-text">
+                    Please select a provider to log in and access protected content.
+                </div>
+                <span class="badge error">Logged Out</span>
+            </div>
+            ${renderProviderButtons()}
+            <div class="divider"></div>
+            <p style="text-align: center; color: #666; font-size: 14px;">
+                Choose any provider above to authenticate
+            </p>
+        `;
+    }
+
+    function renderLoggedIn(logins) {
+        const app = document.getElementById('app');
+        let accountsHTML = '';
+        let protectedHTML = '';
+
+        Object.entries(logins).forEach(([provider, accid]) => {
+            accountsHTML += `
+                <div class="account-info">
+                    <div class="account-label">${CONFIG.PROVIDERS[provider]?.name || provider} Account ID</div>
+                    <div class="account-id">${accid}</div>
+                </div>
             `;
-        }
-    
-        // ==================== AUTH FUNCTIONS ====================
-    
-        function login(provider) {
-            const currentUrl = getCurrentURL();
-            const cookieCheckUrl = `${CONFIG.COOKIE_CHECK_SITE}?fwacc=${encodeURIComponent(currentUrl)}&provider=${provider}`;
-            console.log('Redirecting to cookie check:', cookieCheckUrl);
-            window.location.href = cookieCheckUrl;
-        }
-    
-        function logout() {
-            if (confirm('Are you sure you want to log out from all providers?')) {
-                Object.keys(CONFIG.PROVIDERS).forEach(provider => {
-                    deleteCookie(CONFIG.COOKIE_PREFIX + provider);
-                });
-                checkAuth();
-            }
-        }
-    
-        function checkAuth() {
-            const logins = {};
+            protectedHTML += `
+                <div class="protected-content">
+                    <h2>🎉 Protected Content (${CONFIG.PROVIDERS[provider]?.name || provider})</h2>
+                    <p>This content is only visible to authenticated users for this provider!</p>
+                </div>
+            `;
+        });
+
+        app.innerHTML = `
+            <div class="status-card logged-in">
+                <div class="status-title">✅ Authenticated</div>
+                <div class="status-text">
+                    You are successfully logged in with ${Object.keys(logins).length} provider(s)!
+                </div>
+                <span class="badge success">Logged In</span>
+            </div>
+            ${accountsHTML}
+            ${protectedHTML}
+            <div class="divider"></div>
+            <button class="logout-btn" onclick="logout()">
+                🚪 Logout
+            </button>
+        `;
+    }
+
+    // ==================== AUTH FUNCTIONS ====================
+    function login(provider) {
+        const currentUrl = getCurrentURL();
+        const cookieCheckUrl = `${CONFIG.COOKIE_CHECK_SITE}?fwacc=${encodeURIComponent(currentUrl)}&provider=${provider}`;
+        console.log('Redirecting to cookie check:', cookieCheckUrl);
+        window.location.href = cookieCheckUrl;
+    }
+
+    function logout() {
+        if (confirm('Are you sure you want to log out from all providers?')) {
             Object.keys(CONFIG.PROVIDERS).forEach(provider => {
-                const accid = getCookie(CONFIG.COOKIE_PREFIX + provider);
-                if (accid) logins[provider] = accid;
+                deleteCookie(CONFIG.COOKIE_PREFIX + provider);
             });
-    
-            if (Object.keys(logins).length > 0) {
-                console.log('Authenticated providers:', logins);
-                renderLoggedIn(logins);
-            } else {
-                console.log('No authenticated providers');
-                renderLoggedOut();
-            }
-        }
-    
-        // ==================== INITIALIZATION ====================
-        window.addEventListener('DOMContentLoaded', () => {
-            setTimeout(() => { checkAuth(); }, 500);
-        });
-    
-        document.addEventListener('visibilitychange', () => {
-            if (!document.hidden) checkAuth();
-        });
-    
-        setInterval(() => {
             checkAuth();
-        }, 30000);
-    </script>
+        }
+    }
+
+    function checkAuth() {
+        const cookies = document.cookie.split(';').map(c => c.trim());
+        const logins = {};
+        Object.keys(CONFIG.PROVIDERS).forEach(provider => {
+            const cookieName = CONFIG.COOKIE_PREFIX + provider;
+            const cookie = cookies.find(c => c.startsWith(cookieName + '='));
+            if (cookie) logins[provider] = cookie.split('=')[1];
+        });
+
+        if (Object.keys(logins).length > 0) {
+            console.log('Authenticated providers:', logins);
+            renderLoggedIn(logins);
+        } else {
+            console.log('No authenticated providers');
+            renderLoggedOut();
+        }
+    }
+
+    // ==================== INITIALIZATION ====================
+    window.addEventListener('DOMContentLoaded', () => {
+        setTimeout(() => checkAuth(), 500);
+    });
+
+    document.addEventListener('visibilitychange', () => {
+        if (!document.hidden) checkAuth();
+    });
+
+    setInterval(() => {
+        checkAuth();
+    }, 30000);
+</script>
 </body>
 </html>
