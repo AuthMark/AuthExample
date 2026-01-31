@@ -256,8 +256,8 @@
         // ==================== CONFIGURATION ====================
         const CONFIG = {
             COOKIE_CHECK_SITE: 'https://authmark.github.io/CheckCookie',
-            COOKIE_NAME: 'accid',
-            // For demo purposes - in production, you'd verify this server-side
+            COOKIE_PREFIX: 'accid_', // each provider will have a separate cookie
+            // Example providers (can be empty!)
             PROVIDERS: {
                 google: { name: 'Google', icon: '🔵' },
                 github: { name: 'GitHub', icon: '⚫' },
@@ -265,9 +265,8 @@
                 discord: { name: 'Discord', icon: '🟣' }
             }
         };
-
+    
         // ==================== HELPER FUNCTIONS ====================
-        
         function getCookie(name) {
             const value = `; ${document.cookie}`;
             const parts = value.split(`; ${name}=`);
@@ -276,18 +275,32 @@
             }
             return null;
         }
-
+    
         function deleteCookie(name) {
             document.cookie = `${name}=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT`;
         }
-
+    
         function getCurrentURL() {
-            // Remove any query parameters to get clean return URL
             return window.location.href.split('?')[0];
         }
-
+    
         // ==================== UI RENDERING ====================
-
+    
+        function renderProviderButtons() {
+            if (!CONFIG.PROVIDERS || Object.keys(CONFIG.PROVIDERS).length === 0) {
+                return `<p style="text-align:center; color:#666;">No authentication providers configured. Please contact the admin.</p>`;
+            }
+    
+            return `<div class="provider-grid">
+                ${Object.entries(CONFIG.PROVIDERS).map(([key, provider]) => `
+                    <button class="provider-btn" onclick="login('${key}')">
+                        <span class="provider-icon">${provider.icon}</span>
+                        ${provider.name}
+                    </button>
+                `).join('')}
+            </div>`;
+        }
+    
         function renderLoggedOut() {
             const app = document.getElementById('app');
             app.innerHTML = `
@@ -298,113 +311,103 @@
                     </div>
                     <span class="badge error">Logged Out</span>
                 </div>
-
-                <div class="provider-grid">
-                    ${Object.entries(CONFIG.PROVIDERS).map(([key, provider]) => `
-                        <button class="provider-btn" onclick="login('${key}')">
-                            <span class="provider-icon">${provider.icon}</span>
-                            ${provider.name}
-                        </button>
-                    `).join('')}
-                </div>
-
+    
+                ${renderProviderButtons()}
+    
                 <div class="divider"></div>
-
+    
                 <p style="text-align: center; color: #666; font-size: 14px;">
                     Choose any provider above to authenticate
                 </p>
             `;
         }
-
-        function renderLoggedIn(accid) {
+    
+        function renderLoggedIn(logins) {
             const app = document.getElementById('app');
-            
-            // Try to detect provider from accid (this is optional/demo)
-            // In real implementation, you might store provider info separately
-            const shortId = accid.substring(0, 16);
-            
+    
+            let accountsHTML = '';
+            let protectedHTML = '';
+    
+            Object.entries(logins).forEach(([provider, accid]) => {
+                accountsHTML += `
+                    <div class="account-info">
+                        <div class="account-label">${CONFIG.PROVIDERS[provider]?.name || provider} Account ID</div>
+                        <div class="account-id">${accid}</div>
+                    </div>
+                `;
+                protectedHTML += `
+                    <div class="protected-content">
+                        <h2>🎉 Protected Content (${CONFIG.PROVIDERS[provider]?.name || provider})</h2>
+                        <p>This content is only visible to authenticated users for this provider!</p>
+                    </div>
+                `;
+            });
+    
             app.innerHTML = `
                 <div class="status-card logged-in">
                     <div class="status-title">✅ Authenticated</div>
                     <div class="status-text">
-                        You are successfully logged in and have access to protected resources.
+                        You are successfully logged in with ${Object.keys(logins).length} provider(s)!
                     </div>
                     <span class="badge success">Logged In</span>
                 </div>
-
-                <div class="account-info">
-                    <div class="account-label">Account ID (ACCID)</div>
-                    <div class="account-id">${accid}</div>
-                </div>
-
-                <div class="protected-content">
-                    <h2>🎉 Protected Content</h2>
-                    <p>This content is only visible to authenticated users!</p>
-                </div>
-
+    
+                ${accountsHTML}
+                ${protectedHTML}
+    
                 <div class="divider"></div>
-
+    
                 <button class="logout-btn" onclick="logout()">
                     🚪 Logout
                 </button>
             `;
         }
-
+    
         // ==================== AUTH FUNCTIONS ====================
-
+    
         function login(provider) {
             const currentUrl = getCurrentURL();
             const cookieCheckUrl = `${CONFIG.COOKIE_CHECK_SITE}?fwacc=${encodeURIComponent(currentUrl)}&provider=${provider}`;
-            
             console.log('Redirecting to cookie check:', cookieCheckUrl);
             window.location.href = cookieCheckUrl;
         }
-
+    
         function logout() {
-            if (confirm('Are you sure you want to log out?')) {
-                deleteCookie(CONFIG.COOKIE_NAME);
+            if (confirm('Are you sure you want to log out from all providers?')) {
+                Object.keys(CONFIG.PROVIDERS).forEach(provider => {
+                    deleteCookie(CONFIG.COOKIE_PREFIX + provider);
+                });
                 checkAuth();
             }
         }
-
+    
         function checkAuth() {
-            const accid = getCookie(CONFIG.COOKIE_NAME);
-            
-            if (accid) {
-                console.log('User authenticated with accid:', accid);
-                renderLoggedIn(accid);
+            const logins = {};
+            Object.keys(CONFIG.PROVIDERS).forEach(provider => {
+                const accid = getCookie(CONFIG.COOKIE_PREFIX + provider);
+                if (accid) logins[provider] = accid;
+            });
+    
+            if (Object.keys(logins).length > 0) {
+                console.log('Authenticated providers:', logins);
+                renderLoggedIn(logins);
             } else {
-                console.log('User not authenticated');
+                console.log('No authenticated providers');
                 renderLoggedOut();
             }
         }
-
+    
         // ==================== INITIALIZATION ====================
-
-        // Check authentication status on page load
         window.addEventListener('DOMContentLoaded', () => {
-            // Small delay to show loading state
-            setTimeout(() => {
-                checkAuth();
-            }, 500);
+            setTimeout(() => { checkAuth(); }, 500);
         });
-
-        // Handle visibility change (user returns to tab)
+    
         document.addEventListener('visibilitychange', () => {
-            if (!document.hidden) {
-                checkAuth();
-            }
+            if (!document.hidden) checkAuth();
         });
-
-        // Optional: Periodic auth check (every 30 seconds)
+    
         setInterval(() => {
-            const currentAccid = getCookie(CONFIG.COOKIE_NAME);
-            const displayedAccid = document.querySelector('.account-id')?.textContent;
-            
-            // Re-render if auth state changed
-            if (currentAccid !== displayedAccid) {
-                checkAuth();
-            }
+            checkAuth();
         }, 30000);
     </script>
 </body>
